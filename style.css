@@ -408,7 +408,7 @@ html, body {
 
   /* Player pill — compact */
   #player {
-    bottom: 18px;
+    bottom: 34px;
     width: 94vw;
     padding: 9px 13px 9px 9px;
     gap: 10px;
