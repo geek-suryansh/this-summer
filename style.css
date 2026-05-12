@@ -360,3 +360,71 @@ html, body {
 }
 #fs-btn:hover { color: rgba(255, 255, 255, 0.6); }
 #fs-btn svg { width: 13px; height: 13px; }
+
+/* ── Mobile ─────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+
+  /* Lyrics: full width, clear space for bottom player */
+  #lyrics {
+    width: 100%;
+    padding: 0 7vw 115px;
+  }
+
+  #lyric-line {
+    overflow-wrap: break-word;
+    word-break: break-word;
+  }
+
+  /* Sync overlay text */
+  #sync-line {
+    padding: 0 5vw;
+  }
+
+  /* Intro cover — smaller */
+  #intro-cover {
+    width: clamp(110px, 30vw, 150px);
+    height: clamp(110px, 30vw, 150px);
+    margin-bottom: 20px;
+  }
+
+  /* Intro title already uses clamp, just tighten bottom margin */
+  #intro-sub { margin-bottom: 36px; }
+
+  /* Player pill — compact */
+  #player {
+    bottom: 18px;
+    width: 94vw;
+    padding: 9px 13px 9px 9px;
+    gap: 10px;
+  }
+
+  /* Smaller vinyl */
+  #vinyl-wrap,
+  #player-cover {
+    width: 54px;
+    height: 54px;
+  }
+  #vinyl-hole {
+    width: 10px;
+    height: 10px;
+  }
+
+  /* Shorter waveform track */
+  #prog-track { height: 34px; }
+
+  #player-title { font-size: 0.65rem; }
+
+  /* Tighter right-side controls */
+  #player-controls { gap: 7px; }
+  #time-wrap { gap: 2px; }
+  #time-vis  { width: 34px; height: 13px; }
+  #time      { font-size: 0.57rem; }
+
+  #play-btn            { width: 34px; height: 34px; }
+  #play-btn svg        { width: 12px; height: 12px; }
+
+  #export-btn,
+  #fs-btn              { width: 22px; height: 22px; }
+  #export-btn svg      { width: 10px; height: 10px; }
+  #fs-btn svg          { width: 11px; height: 11px; }
+}

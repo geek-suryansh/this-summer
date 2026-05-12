@@ -451,7 +451,10 @@ function updateLyrics() {
   setTimeout(() => {
     el.textContent    = text;
     el.className      = cls || 'verse';
-    el.style.fontSize = (sizeVw || '2.4') + 'vw';
+    const vw = parseFloat(sizeVw || '2.4');
+    el.style.fontSize = W < 640
+      ? `clamp(12px, ${(vw * 2.0).toFixed(1)}vw, 52px)`
+      : vw + 'vw';
     el.classList.add('visible');
   }, 60);
 }
@@ -512,7 +515,7 @@ function drawWaveform(gi, t) {
   // Frequency bars — lower 45% of bins (bass + mids)
   const binCount = analyser ? analyser.frequencyBinCount : 256;
   const usedBins = Math.floor(binCount * 0.45);
-  const bars = 38;
+  const bars = Math.min(38, Math.max(14, Math.floor(cw / 8)));
   const gap  = 2.5;
   const barW = cw / bars;
   const barAreaH = ch - railH - 2; // leave room for the rail
