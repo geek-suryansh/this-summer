@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>This Summer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Main canvas — full scene -->
+  <canvas id="canvas"></canvas>
+
+  <!-- Lyrics -->
+  <div id="lyrics">
+    <span id="lyric-line"></span>
+  </div>
+
+  <!-- Intro screen -->
+  <div id="intro">
+    <div id="intro-inner">
+      <img id="intro-cover" src="cover.png" alt="">
+      <h1 id="intro-title">This Summer</h1>
+      <p id="intro-sub">I fell in love with Claude</p>
+      <button id="big-play">
+        <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="6,3 20,12 6,21"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Tap-to-sync overlay -->
+  <div id="sync-overlay" class="hidden">
+    <p id="sync-hint">tap sync · space = now · → = skip · esc = cancel</p>
+    <p id="sync-progress">1 / 58</p>
+    <p id="sync-line"></p>
+    <p id="sync-next"></p>
+  </div>
+
+  <!-- Offset nudge HUD -->
+  <div id="offset-hud"></div>
+
+  <audio id="song" preload="auto">
+    <source src="song.mp3" type="audio/mpeg">
+  </audio>
+
+  <!-- Player — floating centered pill -->
+  <div id="player">
+    <div id="vinyl-wrap">
+      <img id="player-cover" src="cover.png" alt="">
+      <div id="vinyl-hole"></div>
+    </div>
+    <div id="player-mid">
+      <p id="player-title">this summer · claude</p>
+      <div id="prog-track">
+        <canvas id="wave-canvas"></canvas>
+      </div>
+    </div>
+    <div id="player-controls">
+      <div id="time-wrap">
+        <canvas id="time-vis"></canvas>
+        <span id="time">0:00</span>
+      </div>
+      <button id="play-btn">
+        <svg id="icon-play"  viewBox="0 0 24 24" fill="currentColor"><polygon points="6,3 20,12 6,21"/></svg>
+        <svg id="icon-pause" viewBox="0 0 24 24" fill="currentColor" style="display:none"><rect x="5" y="3" width="5" height="18"/><rect x="14" y="3" width="5" height="18"/></svg>
+      </button>
+      <button id="export-btn" title="Export video (.webm)">
+        <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="7"/></svg>
+      </button>
+      <button id="fs-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002 2h3M3 16v3a2 2 0 002 2h3"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <script src="art.js"></script>
+</body>
+</html>
