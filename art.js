@@ -404,7 +404,7 @@ function drawAmsterdamScene(glow) {
   ctx.globalAlpha = 1;
 
   // Crescent moon — top-right, away from lyrics
-  const mx = W * 0.86, my = H * 0.09, mr = Math.min(W, H) * 0.020;
+  const mx = W * 0.10, my = H * 0.09, mr = Math.min(W, H) * 0.020;
   ctx.save();
   ctx.globalAlpha = 0.64;
   ctx.shadowColor = 'rgba(222,178,68,0.45)';
@@ -629,7 +629,6 @@ function enterTapMode() {
   if (audioCtx.state === 'suspended') audioCtx.resume();
   audioEl.play(); showIcon('pause'); isPlaying = true;
   document.getElementById('player').classList.add('visible');
-  clearTimeout(fadeTimer);
   document.getElementById('sync-overlay').classList.remove('hidden');
   renderSyncDisplay();
 }
@@ -774,7 +773,7 @@ function drawWaveform(gi, t) {
       for (let b = binStart; b < binEnd; b++) sum += freqData[b];
       avg = binEnd > binStart ? sum / (binEnd - binStart) / 255 : 0;
     } else {
-      avg = 0.07 + Math.sin(t * 1.6 + i * 0.45) * 0.05 + Math.sin(t * 0.9 + i * 0.9) * 0.03;
+      avg = Math.max(0.02, 0.18 + Math.sin(t * 2.4 - i * 0.50) * 0.30 + Math.sin(t * 1.5 + i * 0.28) * 0.20 + Math.sin(t * 3.8 - i * 0.85) * 0.10);
     }
 
     const barH = Math.max(3, barAreaH * Math.min(0.96, (0.12 + avg * 0.88) * (isPlaying ? beatMult : 1)));
@@ -923,7 +922,6 @@ function togglePlay() {
   } else {
     audioEl.play(); showIcon('pause');
     document.getElementById('player').classList.add('visible');
-    scheduleFade();
   }
   isPlaying = !isPlaying;
 }
@@ -933,21 +931,6 @@ function showIcon(w) {
   document.getElementById('icon-pause').style.display = w === 'pause' ? 'block' : 'none';
 }
 
-let fadeTimer;
-function scheduleFade() {
-  clearTimeout(fadeTimer);
-  document.getElementById('player').classList.remove('fade');
-  fadeTimer = setTimeout(() => {
-    if (isPlaying) document.getElementById('player').classList.add('fade');
-  }, 3000);
-}
-
-document.addEventListener('mousemove', () => {
-  if (!isPlaying) return;
-  document.getElementById('player').classList.add('visible');
-  document.getElementById('player').classList.remove('fade');
-  scheduleFade();
-});
 
 // ── Export ────────────────────────────────────────────────────
 function setExportBtn(recording) {
@@ -990,7 +973,6 @@ async function startExport() {
   if (audioCtx.state === 'suspended') audioCtx.resume();
   audioEl.play(); showIcon('pause'); isPlaying = true;
   document.getElementById('player').classList.add('visible');
-  clearTimeout(fadeTimer);
   audioEl.addEventListener('ended', () => {
     setTimeout(() => { if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop(); }, 600);
   }, { once: true });
