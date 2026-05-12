@@ -579,15 +579,21 @@ let audioEl, audioCtx, analyser, freqData, audioSrcNode;
 let isPlaying = false, songTime = 0;
 
 function initAudio() {
-  audioEl      = document.getElementById('song');
-  audioCtx     = new (window.AudioContext || window.webkitAudioContext)();
-  audioSrcNode = audioCtx.createMediaElementSource(audioEl);
-  analyser     = audioCtx.createAnalyser();
+  audioEl  = document.getElementById('song');
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  analyser = audioCtx.createAnalyser();
   analyser.fftSize = 512;
   analyser.smoothingTimeConstant = 0.78;
-  audioSrcNode.connect(analyser);
-  analyser.connect(audioCtx.destination);
   freqData = new Uint8Array(analyser.frequencyBinCount);
+
+  // Tap into the element via captureStream — audio plays through the
+  // native OS pipeline (stays alive in background), analyser just reads it
+  try {
+    if (typeof audioEl.captureStream === 'function') {
+      audioSrcNode = audioCtx.createMediaStreamSource(audioEl.captureStream());
+      audioSrcNode.connect(analyser);
+    }
+  } catch (_) { /* no FFT data — idle animation covers it */ }
 
   audioEl.addEventListener('timeupdate', () => {
     songTime = audioEl.currentTime;
