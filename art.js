@@ -576,7 +576,6 @@ function drawLyricsCanvas(targetCtx) {
 
 // ── Audio ─────────────────────────────────────────────────────
 let audioEl, audioCtx, analyser, freqData, audioSrcNode;
-let waveformData = null;
 let isPlaying = false, songTime = 0;
 
 function initAudio() {
@@ -598,28 +597,6 @@ function initAudio() {
     updateLyrics();
   });
   audioEl.addEventListener('ended', () => { isPlaying = false; showIcon('play'); });
-  precomputeWaveform();
-}
-
-async function precomputeWaveform() {
-  try {
-    const resp = await fetch('song.mp3');
-    const ab   = await resp.arrayBuffer();
-    const buf  = await audioCtx.decodeAudioData(ab);
-    const ch0  = buf.getChannelData(0);
-    const BARS = 120;
-    const sPerBar = Math.floor(ch0.length / BARS);
-    const data = new Float32Array(BARS);
-    for (let i = 0; i < BARS; i++) {
-      let sum = 0;
-      const s0 = i * sPerBar, s1 = Math.min(s0 + sPerBar, ch0.length);
-      for (let s = s0; s < s1; s++) sum += ch0[s] * ch0[s];
-      data[i] = Math.sqrt(sum / (s1 - s0));
-    }
-    const mx = Math.max(...data);
-    if (mx > 0) for (let i = 0; i < BARS; i++) data[i] /= mx;
-    waveformData = data;
-  } catch (_) { /* fallback to animated idle */ }
 }
 
 function getBass() {
@@ -779,37 +756,37 @@ function drawWaveform(gi, t) {
     waveCtx.fillRect(0, ch - railH, playheadX, railH);
   }
 
-  // Static waveform bars — shape from pre-decoded audio, color splits at playhead
-  const bars    = Math.min(60, Math.max(20, Math.floor(cw / 6)));
-  const gap     = 2;
-  const barW    = cw / bars;
-  const barAreaH = ch - railH - 2;
+  // Frequency bars — lower 45% of bins (bass + mids)
+  const binCount = analyser ? analyser.frequencyBinCount : 256;
+  const usedBins = Math.floor(binCount * 0.45);
+  const bars = Math.min(38, Math.max(14, Math.floor(cw / 8)));
+  const gap  = 2.5;
+  const barW = cw / bars;
+  const barAreaH = ch - railH - 2; // leave room for the rail
 
   for (let i = 0; i < bars; i++) {
-    let h;
-    if (waveformData) {
-      const wi = Math.floor(i / bars * waveformData.length);
-      h = waveformData[wi];
+    let avg = 0;
+    if (isPlaying && freqData) {
+      const binStart = Math.floor(i * usedBins / bars);
+      const binEnd   = Math.min(usedBins, Math.floor((i + 1) * usedBins / bars));
+      let sum = 0;
+      for (let b = binStart; b < binEnd; b++) sum += freqData[b];
+      avg = binEnd > binStart ? sum / (binEnd - binStart) / 255 : 0;
     } else {
-      // Animated idle before data loads
-      h = Math.max(0.04, 0.18 + Math.sin(t * 2.4 - i * 0.50) * 0.30
-                                + Math.sin(t * 1.5 + i * 0.28) * 0.20
-                                + Math.sin(t * 3.8 - i * 0.85) * 0.10);
+      avg = Math.max(0.02, 0.18 + Math.sin(t * 2.4 - i * 0.50) * 0.30 + Math.sin(t * 1.5 + i * 0.28) * 0.20 + Math.sin(t * 3.8 - i * 0.85) * 0.10);
     }
 
-    const x      = i * barW + gap / 2;
-    const bw     = Math.max(2, barW - gap);
+    const barH = Math.max(3, barAreaH * Math.min(0.96, (0.12 + avg * 0.88) * (isPlaying ? beatMult : 1)));
+    const x    = i * barW + gap / 2;
+    const bw   = Math.max(2, barW - gap);
+    const y    = barAreaH - barH; // grow upward from the rail
+
     const played = (x + bw * 0.5) < playheadX;
-
-    const effectiveH = played && isPlaying ? h * beatMult : h;
-    const barH = Math.max(3, barAreaH * Math.min(0.95, 0.08 + effectiveH * 0.90));
-    const y    = barAreaH - barH;
-
     if (played) {
-      const alpha = 0.60 + h * 0.38 + beatFlash * 0.10;
+      const alpha = 0.65 + avg * 0.35 + beatFlash * 0.14;
       waveCtx.fillStyle = `rgba(240,110,60,${Math.min(1, alpha).toFixed(2)})`;
     } else {
-      const alpha = 0.10 + h * 0.14;
+      const alpha = 0.11 + avg * 0.16;
       waveCtx.fillStyle = `rgba(210,190,170,${alpha.toFixed(2)})`;
     }
 
