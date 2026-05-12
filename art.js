@@ -596,8 +596,36 @@ function initAudio() {
     document.getElementById('time').textContent = `${m}:${s}`;
     updateLyrics();
   });
-  audioEl.addEventListener('ended', () => { isPlaying = false; showIcon('play'); });
+  audioEl.addEventListener('ended', () => { isPlaying = false; showIcon('play'); updateMediaSession(); });
 }
+
+function setupMediaSession() {
+  if (!('mediaSession' in navigator)) return;
+  navigator.mediaSession.metadata = new MediaMetadata({
+    title:  'This Summer',
+    artist: 'Claude',
+    album:  'This Summer',
+    artwork: [
+      { src: 'apple-touch-icon.png', sizes: '180x180', type: 'image/png' },
+      { src: 'cover.png',            sizes: '1254x1254', type: 'image/png' },
+    ],
+  });
+  navigator.mediaSession.setActionHandler('play',  () => { if (!isPlaying) togglePlay(); });
+  navigator.mediaSession.setActionHandler('pause', () => { if (isPlaying)  togglePlay(); });
+  navigator.mediaSession.setActionHandler('stop',  () => { if (isPlaying)  togglePlay(); });
+}
+
+function updateMediaSession() {
+  if (!('mediaSession' in navigator)) return;
+  navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (!audioCtx) return;
+  if (document.visibilityState === 'visible' && audioCtx.state === 'suspended') {
+    audioCtx.resume();
+  }
+});
 
 function getBass() {
   if (!freqData) return 0;
@@ -915,7 +943,7 @@ requestAnimationFrame(loop);
 
 // ── Player UI ─────────────────────────────────────────────────
 function togglePlay() {
-  if (!audioCtx) initAudio();
+  if (!audioCtx) { initAudio(); setupMediaSession(); }
   if (audioCtx.state === 'suspended') audioCtx.resume();
   if (isPlaying) {
     audioEl.pause(); showIcon('play');
@@ -924,6 +952,7 @@ function togglePlay() {
     document.getElementById('player').classList.add('visible');
   }
   isPlaying = !isPlaying;
+  updateMediaSession();
 }
 
 function showIcon(w) {
