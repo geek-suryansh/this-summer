@@ -69,40 +69,37 @@ let exportCanvas = document.createElement('canvas');
 let exportCtx    = exportCanvas.getContext('2d');
 let isExporting  = false, exportChunks = [], mediaRecorder = null;
 
-// ── Images ────────────────────────────────────────────────────
+// ── Cover image ───────────────────────────────────────────────
 const coverImg = new Image();
 coverImg.crossOrigin = 'anonymous';
 coverImg.src = 'cover.png';
 
-const bgImg = new Image();
-bgImg.src = 'amsterdam.jpg';
+// ── Amsterdam procedural scene ────────────────────────────────
+// Canal horizon sits at this fraction of screen height
+const HORIZON = 0.57;
 
-// Offscreen canvas for pixel-art downscale
-const PIXEL_SIZE = 8;
-const pixelCanvas = document.createElement('canvas');
-const pixelCtx    = pixelCanvas.getContext('2d');
-
-// ── Water shimmer (overlaid on photo) ─────────────────────────
-function drawWater(glow) {
-  // Canal sits in the bottom ~40% of the photo after the night crop
-  const waterY = H * 0.60;
-  const t = Date.now() * 0.0006;
-
-  for (let i = 0; i < 6; i++) {
-    const phase = t + i * 1.1;
-    const y     = waterY + i * (H - waterY - 10) * 0.17;
-    const alpha = (0.09 + glow * 0.11) * (Math.sin(phase * 1.3) * 0.3 + 0.7);
-    const col   = i % 2 === 0 ? [175, 90, 20] : [200, 130, 40];
-    const sh    = ctx.createLinearGradient(W * 0.05, y, W * 0.95, y);
-    sh.addColorStop(0,   `rgba(${col[0]},${col[1]},${col[2]},0)`);
-    sh.addColorStop(0.2, `rgba(${col[0]},${col[1]},${col[2]},${alpha})`);
-    sh.addColorStop(0.5, `rgba(${col[0]},${col[1]},${col[2]},${alpha * 1.35})`);
-    sh.addColorStop(0.8, `rgba(${col[0]},${col[1]},${col[2]},${alpha})`);
-    sh.addColorStop(1,   `rgba(${col[0]},${col[1]},${col[2]},0)`);
-    ctx.fillStyle = sh;
-    ctx.fillRect(W * 0.05, y - 0.8, W * 0.9, 1.6);
-  }
-}
+// Buildings: [xFrac, wFrac, hFrac, gableType]
+// hFrac = height above horizon line, as fraction of H
+const BLDGS = [
+  [0.000, 0.055, 0.30, 'step'],
+  [0.055, 0.042, 0.24, 'bell'],
+  [0.097, 0.056, 0.36, 'step'],
+  // Westerkerk occupies 0.153 – 0.223
+  [0.230, 0.065, 0.28, 'bell'],
+  [0.295, 0.050, 0.33, 'step'],
+  [0.345, 0.058, 0.21, 'neck'],
+  [0.403, 0.052, 0.30, 'step'],
+  [0.455, 0.046, 0.24, 'bell'],
+  [0.501, 0.062, 0.34, 'step'],
+  [0.563, 0.044, 0.21, 'tri'],
+  [0.607, 0.065, 0.38, 'step'],
+  [0.672, 0.049, 0.26, 'bell'],
+  [0.721, 0.057, 0.24, 'neck'],
+  [0.778, 0.055, 0.31, 'step'],
+  [0.833, 0.056, 0.23, 'tri'],
+  [0.889, 0.046, 0.28, 'bell'],
+  [0.935, 0.065, 0.22, 'step'],
+];
 
 const STAR_POS = [
   [0.06,0.05],[0.14,0.11],[0.21,0.03],[0.30,0.08],[0.37,0.15],
@@ -111,87 +108,335 @@ const STAR_POS = [
   [0.61,0.16],[0.77,0.21],[0.04,0.28],[0.53,0.26],[0.39,0.25],
 ];
 
-function drawBackground(glow) {
-  // ── Dark base ──
-  ctx.fillStyle = '#060810';
-  ctx.fillRect(0, 0, W, H);
+// ── Gable helpers ─────────────────────────────────────────────
 
-  // ── Amsterdam photo — pixel art, flipped, anchored to bottom ──
-  if (bgImg.complete && bgImg.naturalWidth) {
-    const iw = bgImg.naturalWidth, ih = bgImg.naturalHeight;
-    const ca = W / H, ia = iw / ih;
-    let sx, sy, sw, sh;
+function gableStep(bx, ty, bw, gh) {
+  const cx = bx + bw / 2;
+  ctx.beginPath();
+  ctx.moveTo(bx, ty);
+  ctx.lineTo(bx,              ty - gh * 0.28);
+  ctx.lineTo(cx - bw * 0.30, ty - gh * 0.28);
+  ctx.lineTo(cx - bw * 0.30, ty - gh * 0.55);
+  ctx.lineTo(cx - bw * 0.16, ty - gh * 0.55);
+  ctx.lineTo(cx - bw * 0.16, ty - gh * 0.78);
+  ctx.lineTo(cx - bw * 0.07, ty - gh * 0.78);
+  ctx.lineTo(cx,              ty - gh * 1.04);
+  ctx.lineTo(cx + bw * 0.07, ty - gh * 0.78);
+  ctx.lineTo(cx + bw * 0.16, ty - gh * 0.78);
+  ctx.lineTo(cx + bw * 0.16, ty - gh * 0.55);
+  ctx.lineTo(cx + bw * 0.30, ty - gh * 0.55);
+  ctx.lineTo(cx + bw * 0.30, ty - gh * 0.28);
+  ctx.lineTo(bx + bw,        ty - gh * 0.28);
+  ctx.lineTo(bx + bw,        ty);
+  ctx.closePath();
+  ctx.fill();
+}
 
-    if (ca > ia) {
-      sw = iw; sh = Math.round(iw / ca);
-      sx = 0;  sy = ih - sh; // anchor bottom: show canal, crop sky
-    } else {
-      sh = ih; sw = Math.round(ih * ca);
-      sx = Math.round((iw - sw) / 2); sy = 0;
-    }
-    sy = Math.max(0, Math.min(sy, ih - sh));
+function gableBell(bx, ty, bw, gh) {
+  const cx = bx + bw / 2;
+  ctx.beginPath();
+  ctx.moveTo(bx, ty);
+  ctx.bezierCurveTo(bx, ty - gh * 0.40, cx - bw * 0.38, ty - gh * 0.52, cx - bw * 0.10, ty - gh * 0.88);
+  ctx.lineTo(cx - bw * 0.05, ty - gh * 0.97);
+  ctx.lineTo(cx,              ty - gh * 1.06);
+  ctx.lineTo(cx + bw * 0.05, ty - gh * 0.97);
+  ctx.lineTo(cx + bw * 0.10, ty - gh * 0.88);
+  ctx.bezierCurveTo(cx + bw * 0.38, ty - gh * 0.52, bx + bw, ty - gh * 0.40, bx + bw, ty);
+  ctx.closePath();
+  ctx.fill();
+}
 
-    // Step 1: draw at pixel-art resolution with night filter
-    const pw = pixelCanvas.width, ph = pixelCanvas.height;
-    pixelCtx.save();
-    pixelCtx.filter = 'brightness(0.30) saturate(0.55)';
-    pixelCtx.drawImage(bgImg, sx, sy, sw, sh, 0, 0, pw, ph);
-    pixelCtx.filter = 'none';
-    pixelCtx.restore();
+function gableNeck(bx, ty, bw, gh) {
+  const cx = bx + bw / 2;
+  const nw = bw * 0.32;
+  ctx.beginPath();
+  ctx.moveTo(bx, ty);
+  ctx.bezierCurveTo(bx, ty - gh * 0.38, cx - nw/2 - bw*0.08, ty - gh*0.44, cx - nw/2, ty - gh*0.52);
+  ctx.lineTo(cx - nw/2,              ty - gh * 0.74);
+  ctx.lineTo(cx - nw/2 - bw * 0.05, ty - gh * 0.74);
+  ctx.lineTo(cx - nw/2 - bw * 0.05, ty - gh * 0.82);
+  ctx.lineTo(cx - bw * 0.07,         ty - gh * 0.82);
+  ctx.lineTo(cx,                      ty - gh * 1.02);
+  ctx.lineTo(cx + bw * 0.07,         ty - gh * 0.82);
+  ctx.lineTo(cx + nw/2 + bw * 0.05, ty - gh * 0.82);
+  ctx.lineTo(cx + nw/2 + bw * 0.05, ty - gh * 0.74);
+  ctx.lineTo(cx + nw/2,              ty - gh * 0.74);
+  ctx.bezierCurveTo(cx + nw/2 + bw*0.08, ty - gh*0.44, bx + bw, ty - gh*0.38, bx + bw, ty);
+  ctx.closePath();
+  ctx.fill();
+}
 
-    // Step 2: draw back at full size — flipped L↔R, no smoothing (keeps pixels sharp)
-    ctx.save();
-    ctx.imageSmoothingEnabled = false;
-    ctx.transform(-1, 0, 0, 1, W, 0); // horizontal mirror
-    ctx.drawImage(pixelCanvas, 0, 0, W, H);
-    ctx.restore();
-    ctx.imageSmoothingEnabled = true;
+function gableTri(bx, ty, bw, gh) {
+  const cx = bx + bw / 2;
+  ctx.beginPath();
+  ctx.moveTo(bx, ty);
+  ctx.lineTo(cx,      ty - gh * 1.05);
+  ctx.lineTo(bx + bw, ty);
+  ctx.closePath();
+  ctx.fill();
+}
 
-    // Blue-dark night overlay
-    ctx.fillStyle = 'rgba(4, 7, 20, 0.42)';
-    ctx.fillRect(0, 0, W, H);
+// ── Single canal house ────────────────────────────────────────
 
-    // Night sky fade — replaces the photo sky at top
-    const skyFade = ctx.createLinearGradient(0, 0, 0, H * 0.48);
-    skyFade.addColorStop(0,    'rgba(4, 7, 16, 1.0)');
-    skyFade.addColorStop(0.55, 'rgba(4, 7, 16, 0.85)');
-    skyFade.addColorStop(1,    'rgba(4, 7, 16, 0)');
-    ctx.fillStyle = skyFade;
-    ctx.fillRect(0, 0, W, H * 0.48);
+function drawBuilding(bx, hy, bw, bh, type, glow, t) {
+  if (bw < 2) return;
+  const gh    = bh * 0.24;
+  const bodyH = bh - gh;
+  const bodyY = hy - bodyH;
+
+  // Subtle per-building shade variation
+  const s = 20 + Math.floor((bx / W) * 14);
+  ctx.fillStyle = `rgb(${s},${Math.floor(s * 0.42)},${Math.floor(s * 0.24)})`;
+  ctx.fillRect(bx, bodyY, bw, bodyH);
+
+  // Gable
+  switch (type) {
+    case 'step': gableStep(bx, bodyY, bw, gh); break;
+    case 'bell': gableBell(bx, bodyY, bw, gh); break;
+    case 'neck': gableNeck(bx, bodyY, bw, gh); break;
+    case 'tri':  gableTri (bx, bodyY, bw, gh); break;
   }
 
-  // ── Stars in the night sky ──
-  const t = Date.now() * 0.001;
+  // Windows — count scales with building footprint
+  const cols = Math.max(1, Math.round(bw / Math.max(W * 0.025, 16)));
+  const rows = Math.max(1, Math.round(bodyH / Math.max(H * 0.058, 20)));
+  const ww   = Math.max(2, bw * 0.13);
+  const wh   = ww * 1.45;
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const wx  = bx + (c + 0.5) * (bw / cols) - ww / 2;
+      const wy  = bodyY + bodyH * 0.14 + r * (bodyH * 0.76 / Math.max(rows, 1));
+      const flk = 0.62 + 0.38 * Math.sin(t * (1.1 + (r * 7 + c) * 0.38) + r * 3.1 + c + bx * 0.02);
+      const wa  = (0.42 + glow * 0.30) * flk;
+
+      // Soft glow halo
+      const gr = ctx.createRadialGradient(wx + ww/2, wy + wh/2, 0, wx + ww/2, wy + wh/2, ww * 2.6);
+      gr.addColorStop(0, `rgba(240,152,32,${(wa * 0.52).toFixed(2)})`);
+      gr.addColorStop(1, 'rgba(240,152,32,0)');
+      ctx.fillStyle = gr;
+      ctx.fillRect(wx - ww, wy - wh * 0.6, ww * 3, wh * 2.6);
+
+      // Pane
+      ctx.fillStyle = `rgba(248,188,52,${wa.toFixed(2)})`;
+      ctx.fillRect(wx, wy, ww, wh);
+    }
+  }
+}
+
+// ── Westerkerk church tower ────────────────────────────────────
+
+function drawWesterkerk(hy, glow) {
+  const wx = W * 0.153;
+  const ww = W * 0.070;
+  const cx = wx + ww / 2;
+  const H0 = hy; // horizon
+
+  // Nave — wide low body
+  const nW = ww * 1.55, nH = H0 * 0.38;
+  ctx.fillStyle = '#200c06';
+  ctx.fillRect(cx - nW/2, H0 - nH, nW, nH);
+  // Nave triangular roof
+  ctx.fillStyle = '#1a0904';
+  ctx.beginPath();
+  ctx.moveTo(cx - nW/2, H0 - nH);
+  ctx.lineTo(cx,         H0 - nH - H0 * 0.09);
+  ctx.lineTo(cx + nW/2,  H0 - nH);
+  ctx.closePath(); ctx.fill();
+
+  // Tower shaft 1
+  const t1w = ww * 0.72, t1h = H0 * 0.22;
+  ctx.fillStyle = '#241005';
+  ctx.fillRect(cx - t1w/2, H0 - nH - t1h, t1w, t1h);
+
+  // Tower shaft 2
+  const t2w = ww * 0.54, t2h = H0 * 0.17;
+  const t2y = H0 - nH - t1h - t2h;
+  ctx.fillStyle = '#281206';
+  ctx.fillRect(cx - t2w/2, t2y, t2w, t2h);
+
+  // Octagonal belfry
+  const t3w = ww * 0.42, t3h = H0 * 0.13;
+  const t3y = t2y - t3h;
+  const oc  = t3w * 0.19;
+  ctx.fillStyle = '#2c1408';
+  ctx.beginPath();
+  ctx.moveTo(cx - t3w/2 + oc, t2y);
+  ctx.lineTo(cx - t3w/2,      t2y - t3h * 0.28);
+  ctx.lineTo(cx - t3w/2,      t2y - t3h * 0.72);
+  ctx.lineTo(cx - t3w/2 + oc, t3y);
+  ctx.lineTo(cx + t3w/2 - oc, t3y);
+  ctx.lineTo(cx + t3w/2,      t2y - t3h * 0.72);
+  ctx.lineTo(cx + t3w/2,      t2y - t3h * 0.28);
+  ctx.lineTo(cx + t3w/2 - oc, t2y);
+  ctx.closePath(); ctx.fill();
+
+  // Spire
+  const spW = ww * 0.24, spH = H0 * 0.22;
+  ctx.fillStyle = '#1e0a04';
+  ctx.beginPath();
+  ctx.moveTo(cx - spW/2, t3y);
+  ctx.lineTo(cx,          t3y - spH);
+  ctx.lineTo(cx + spW/2, t3y);
+  ctx.closePath(); ctx.fill();
+
+  // Imperial crown — glowing ring + cross at spire tip
+  const crY = t3y - spH;
+  const cr  = Math.max(2, W * 0.0072);
+  ctx.save();
+  ctx.strokeStyle = `rgba(242,168,48,${0.52 + glow * 0.40})`;
+  ctx.lineWidth   = Math.max(1, W * 0.0014);
+  ctx.shadowColor = 'rgba(240,130,28,0.75)';
+  ctx.shadowBlur  = 5 + glow * 10;
+  ctx.beginPath(); ctx.arc(cx, crY, cr, 0, Math.PI * 2); ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(cx,          crY - cr);
+  ctx.lineTo(cx,          crY - cr * 2.5);
+  ctx.moveTo(cx - cr,     crY - cr * 1.7);
+  ctx.lineTo(cx + cr,     crY - cr * 1.7);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// ── Canal ─────────────────────────────────────────────────────
+
+function drawCanal(hy, glow, t) {
+  const wg = ctx.createLinearGradient(0, hy, 0, H);
+  wg.addColorStop(0,   '#100806');
+  wg.addColorStop(0.4, '#0c0604');
+  wg.addColorStop(1,   '#060402');
+  ctx.fillStyle = wg;
+  ctx.fillRect(0, hy, W, H - hy);
+
+  // Horizon glint
+  ctx.fillStyle = `rgba(162,65,16,${0.38 + glow * 0.24})`;
+  ctx.fillRect(0, hy - 1, W, 2);
+
+  // Shimmer lines
+  for (let i = 0; i < 7; i++) {
+    const phase = t * 0.65 + i * 1.25;
+    const y     = hy + (H - hy) * (0.08 + i * 0.13);
+    const a     = (0.07 + glow * 0.10) * (Math.sin(phase * 1.2) * 0.32 + 0.68);
+    const c     = i % 2 === 0 ? [175, 82, 18] : [200, 112, 28];
+    const sh    = ctx.createLinearGradient(W * 0.04, y, W * 0.96, y);
+    sh.addColorStop(0,   `rgba(${c[0]},${c[1]},${c[2]},0)`);
+    sh.addColorStop(0.2, `rgba(${c[0]},${c[1]},${c[2]},${a.toFixed(3)})`);
+    sh.addColorStop(0.5, `rgba(${c[0]},${c[1]},${c[2]},${(a*1.4).toFixed(3)})`);
+    sh.addColorStop(0.8, `rgba(${c[0]},${c[1]},${c[2]},${a.toFixed(3)})`);
+    sh.addColorStop(1,   `rgba(${c[0]},${c[1]},${c[2]},0)`);
+    ctx.fillStyle = sh;
+    ctx.fillRect(W * 0.04, y - 0.9, W * 0.92, 1.8);
+  }
+}
+
+// ── Vignette & atmospheric mist ───────────────────────────────
+
+function drawVignette() {
+  // Desktop: darken left half where lyrics live
+  // Mobile: full radial darken (lyrics are full-width)
+  if (W < 640) {
+    const rv = ctx.createRadialGradient(W/2, H*0.38, 0, W/2, H*0.38, Math.max(W,H)*0.80);
+    rv.addColorStop(0,    'rgba(6,3,1,0.28)');
+    rv.addColorStop(0.55, 'rgba(6,3,1,0.50)');
+    rv.addColorStop(1,    'rgba(6,3,1,0.75)');
+    ctx.fillStyle = rv;
+    ctx.fillRect(0, 0, W, H);
+  } else {
+    const lv = ctx.createLinearGradient(0, 0, W * 0.56, 0);
+    lv.addColorStop(0,    'rgba(6,3,1,0.80)');
+    lv.addColorStop(0.42, 'rgba(6,3,1,0.55)');
+    lv.addColorStop(1,    'rgba(6,3,1,0)');
+    ctx.fillStyle = lv;
+    ctx.fillRect(0, 0, W * 0.56, H);
+  }
+
+  // Screen-edge vignette
+  const ev = ctx.createRadialGradient(W/2, H/2, Math.min(W,H)*0.28, W/2, H/2, Math.max(W,H)*0.80);
+  ev.addColorStop(0, 'rgba(0,0,0,0)');
+  ev.addColorStop(1, 'rgba(0,0,0,0.50)');
+  ctx.fillStyle = ev;
+  ctx.fillRect(0, 0, W, H);
+
+  // Warm color mist near horizon — softens the building-to-sky edge
+  const mist = ctx.createLinearGradient(0, H*(HORIZON - 0.13), 0, H*(HORIZON + 0.08));
+  mist.addColorStop(0,    'rgba(100,35,8,0)');
+  mist.addColorStop(0.45, 'rgba(80,28,6,0.24)');
+  mist.addColorStop(1,    'rgba(60,20,4,0)');
+  ctx.fillStyle = mist;
+  ctx.fillRect(0, H*(HORIZON - 0.13), W, H*0.21);
+}
+
+// ── Main scene ────────────────────────────────────────────────
+
+function drawAmsterdamScene(glow) {
+  const hy = H * HORIZON;
+  const t  = Date.now() * 0.001;
+
+  // Sky gradient — warm amber dusk palette
+  const sky = ctx.createLinearGradient(0, 0, 0, hy);
+  sky.addColorStop(0,    '#0c0818');
+  sky.addColorStop(0.30, '#1c0d07');
+  sky.addColorStop(0.62, '#4c1c08');
+  sky.addColorStop(0.82, '#7c2c0a');
+  sky.addColorStop(1,    '#a23c12');
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, W, hy);
+
+  // Chorus horizon flare
+  if (glow > 0.08) {
+    const hg = ctx.createLinearGradient(0, hy * 0.62, 0, hy);
+    hg.addColorStop(0, 'rgba(185,72,12,0)');
+    hg.addColorStop(1, `rgba(215,92,18,${(glow * 0.30).toFixed(3)})`);
+    ctx.fillStyle = hg;
+    ctx.fillRect(0, hy * 0.62, W, hy * 0.38);
+  }
+
+  // Stars
   for (let i = 0; i < STAR_POS.length; i++) {
     const [sx, sy] = STAR_POS[i];
     const twk = 0.4 + Math.sin(t * (0.4 + i * 0.27) + i * 1.8) * 0.4;
-    ctx.globalAlpha = twk * 0.42;
-    ctx.fillStyle = '#d8cdb4';
-    ctx.beginPath(); ctx.arc(sx * W, sy * H * 0.40, 0.7 + twk * 0.6, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = twk * 0.36;
+    ctx.fillStyle = '#e0c890';
+    ctx.beginPath();
+    ctx.arc(sx * W, sy * hy * 0.66, 0.6 + twk * 0.5, 0, Math.PI * 2);
+    ctx.fill();
   }
   ctx.globalAlpha = 1;
 
-  // ── Crescent moon — top-left, matching cover art position ──
-  const mx = W * 0.10, my = H * 0.10, mr = Math.min(W, H) * 0.022;
+  // Crescent moon — top-right, away from lyrics
+  const mx = W * 0.86, my = H * 0.09, mr = Math.min(W, H) * 0.020;
   ctx.save();
-  ctx.globalAlpha = 0.60;
+  ctx.globalAlpha = 0.64;
+  ctx.shadowColor = 'rgba(222,178,68,0.45)';
+  ctx.shadowBlur  = 14;
   ctx.beginPath(); ctx.arc(mx, my, mr, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgb(225, 212, 178)'; ctx.fill();
+  ctx.fillStyle = '#ead090'; ctx.fill();
   ctx.globalCompositeOperation = 'destination-out';
-  ctx.beginPath(); ctx.arc(mx - mr * 0.5, my - mr * 0.08, mr * 0.86, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(mx - mr*0.48, my - mr*0.06, mr*0.84, 0, Math.PI*2); ctx.fill();
   ctx.restore();
 
-  // ── Canal shimmer ──
-  drawWater(glow);
+  // Canal houses
+  for (const [xf, wf, hf, type] of BLDGS) {
+    drawBuilding(xf * W, hy, Math.max(4, wf * W), hf * H, type, glow, t);
+  }
 
-  // ── Centre divider ──
-  const div = ctx.createLinearGradient(W / 2, H * 0.08, W / 2, H * 0.92);
-  div.addColorStop(0,    'rgba(200, 115, 55, 0)');
-  div.addColorStop(0.25, `rgba(200, 115, 55, ${0.07 + glow * 0.05})`);
-  div.addColorStop(0.75, `rgba(200, 115, 55, ${0.07 + glow * 0.05})`);
-  div.addColorStop(1,    'rgba(200, 115, 55, 0)');
+  // Westerkerk
+  drawWesterkerk(hy, glow);
+
+  // Canal water
+  drawCanal(hy, glow, t);
+
+  // Vignette + mist overlay
+  drawVignette();
+
+  // Centre divider
+  const div = ctx.createLinearGradient(W/2, H*0.08, W/2, H*0.92);
+  div.addColorStop(0,    'rgba(200,100,35,0)');
+  div.addColorStop(0.25, `rgba(200,100,35,${0.06 + glow*0.04})`);
+  div.addColorStop(0.75, `rgba(200,100,35,${0.06 + glow*0.04})`);
+  div.addColorStop(1,    'rgba(200,100,35,0)');
   ctx.fillStyle = div;
-  ctx.fillRect(W / 2 - 0.5, 0, 1, H);
+  ctx.fillRect(W/2 - 0.5, 0, 1, H);
 }
 
 // ── Cover image ───────────────────────────────────────────────
@@ -645,7 +890,7 @@ function loop() {
   const t  = isPlaying && audioEl ? audioEl.currentTime : Date.now() * 0.001;
 
   tickBlinker(t);
-  drawBackground(gi);
+  drawAmsterdamScene(gi);
   drawCoverImage(gi);
   drawBlinker(gi, t);
   drawParticles(gi);
@@ -664,8 +909,6 @@ function resize() {
   W = canvas.width  = window.innerWidth;
   H = canvas.height = window.innerHeight;
   exportCanvas.width  = W; exportCanvas.height  = H;
-  pixelCanvas.width   = Math.ceil(W / PIXEL_SIZE);
-  pixelCanvas.height  = Math.ceil(H / PIXEL_SIZE);
 }
 window.addEventListener('resize', resize);
 resize();
