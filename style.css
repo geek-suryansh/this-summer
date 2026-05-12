@@ -371,9 +371,10 @@ html, body {
   font-size: 0.58rem;
   letter-spacing: 0.12em;
   font-style: italic;
-  color: rgba(255, 255, 255, 0.38);
+  color: rgba(255, 255, 255, 0.70);
   white-space: nowrap;
   pointer-events: none;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.80);
 }
 
 /* ── Mobile ─────────────────────────────────────────────────── */
